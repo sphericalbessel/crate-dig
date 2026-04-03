@@ -151,9 +151,9 @@ Crate Dig is a local web app for scanning, viewing, and editing music file metad
 - Don't add dependencies without explaining why the standard library won't work.
 
 ## Current status
-- [ ] Project scaffolding (files, folders, .gitignore, requirements.txt)
-- [ ] Scanner module — discover music files in given directories
-- [ ] Metadata reader — extract tags from discovered files using mutagen
+- [x] Project scaffolding (files, folders, .gitignore, requirements.txt)
+- [x] Scanner module — discover music files in given directories
+- [x] Metadata reader — extract tags from discovered files using mutagen
 - [ ] Flask API — GET /tracks endpoint returning JSON
 - [ ] Frontend — basic table displaying track data
 - [ ] Metadata editor — inline editing in the table
