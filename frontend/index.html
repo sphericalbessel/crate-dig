@@ -2,10 +2,571 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Crate Dig</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f11;
+      --surface: #18181d;
+      --surface2: #22222a;
+      --accent: #7c6af7;
+      --muted: #88889a;
+      --text: #e2e2ec;
+      --border: #2a2a35;
+      --error-bg: #3a1c1c;
+      --radius: 6px;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      height: 48px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    header h1 {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    button.ghost {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 4px 12px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    button.ghost:hover { border-color: var(--accent); color: var(--text); }
+
+    /* ── Config panel ── */
+    #config-panel {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px;
+      display: none;
+      flex-shrink: 0;
+    }
+
+    #config-panel.visible { display: block; }
+
+    .config-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .folder-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 360px;
+      max-width: 600px;
+      flex: 1;
+    }
+
+    .folder-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 6px 10px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .folder-item span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .folder-item button {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 15px;
+      line-height: 1;
+      padding: 0 2px;
+    }
+
+    .folder-item button:hover { color: #e05c5c; }
+
+    .add-folder-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .add-folder-row input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      padding: 6px 10px;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .add-folder-row input:focus { border-color: var(--accent); }
+    .add-folder-row input::placeholder { color: var(--muted); }
+
+    .add-folder-row button {
+      background: var(--accent);
+      border: none;
+      border-radius: var(--radius);
+      color: #fff;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 0 12px;
+      font-weight: 600;
+    }
+
+    .add-folder-row button:hover { opacity: 0.85; }
+
+    .scan-area {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    button#scan-btn {
+      background: var(--accent);
+      border: none;
+      border-radius: var(--radius);
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 8px 20px;
+      white-space: nowrap;
+    }
+
+    button#scan-btn:disabled { opacity: 0.5; cursor: default; }
+    button#scan-btn:not(:disabled):hover { opacity: 0.85; }
+
+    #status {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* ── Search bar ── */
+    #search-bar {
+      padding: 10px 20px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    #search-bar input {
+      width: 100%;
+      max-width: 440px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      padding: 7px 12px 7px 32px;
+      font-size: 14px;
+      outline: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%2388889a' stroke-width='2' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: 10px center;
+    }
+
+    #search-bar input:focus { border-color: var(--accent); }
+    #search-bar input::placeholder { color: var(--muted); }
+
+    /* ── Table container ── */
+    #table-container {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    #table-container::-webkit-scrollbar { width: 6px; }
+    #table-container::-webkit-scrollbar-track { background: var(--bg); }
+    #table-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    thead {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--surface);
+    }
+
+    th {
+      padding: 10px 16px;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      user-select: none;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    th:hover { color: var(--text); }
+    th.active { color: var(--accent); }
+    th.right, td.right { text-align: right; }
+
+    /* Column widths */
+    th:nth-child(1) { width: auto; }      /* Title — flex */
+    th:nth-child(2) { width: 14%; }       /* Artist */
+    th:nth-child(3) { width: 14%; }       /* Album */
+    th:nth-child(4) { width: 9%; }        /* Genre */
+    th:nth-child(5) { width: 5%; }        /* BPM */
+    th:nth-child(6) { width: 5%; }        /* Key */
+    th:nth-child(7) { width: 6%; }        /* Duration */
+    th:nth-child(8) { width: 4%; }        /* Fmt */
+    th:nth-child(9) { width: 5%; }        /* MB */
+
+    td {
+      padding: 0 16px;
+      height: 40px;
+      border-bottom: 1px solid var(--border);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+
+    td.muted { color: var(--muted); }
+    td.title-cell { font-weight: 500; }
+
+    tbody tr:hover td { background: var(--surface2); }
+    tbody tr.error-row td { background: var(--error-bg); }
+
+    #empty-state {
+      padding: 60px 20px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+  </style>
 </head>
 <body>
-  <h1>Crate Dig</h1>
-  <p>Frontend coming in Session 4.</p>
+
+  <header>
+    <h1>Crate Dig</h1>
+    <button class="ghost" id="config-toggle">config</button>
+  </header>
+
+  <div id="config-panel">
+    <div class="config-row">
+      <div class="folder-list" id="folder-list">
+        <!-- folder items rendered here -->
+        <div class="add-folder-row">
+          <input type="text" id="folder-input" placeholder="/path/to/music/folder">
+          <button id="add-folder-btn" title="Add folder">+</button>
+        </div>
+      </div>
+      <div class="scan-area">
+        <button id="scan-btn">Scan</button>
+        <span id="status"></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="search-bar">
+    <input type="text" id="search-input" placeholder="Search tracks...">
+  </div>
+
+  <div id="table-container">
+    <table id="track-table">
+      <thead>
+        <tr>
+          <th data-col="title">Title</th>
+          <th data-col="artist">Artist</th>
+          <th data-col="album">Album</th>
+          <th data-col="genre">Genre</th>
+          <th data-col="bpm" class="right">BPM</th>
+          <th data-col="key">Key</th>
+          <th data-col="duration_seconds" class="right">Duration</th>
+          <th data-col="file_format">Fmt</th>
+          <th data-col="file_size_mb" class="right">MB</th>
+        </tr>
+      </thead>
+      <tbody id="track-tbody">
+        <tr><td colspan="9"><div id="empty-state">Add a folder and click Scan to load your library.</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    // ── State ──────────────────────────────────────────────
+    let allTracks = [];
+    let sortCol = null;
+    let sortDir = 'asc';
+    let searchQuery = '';
+    let folders = [];
+
+    // ── Utilities ─────────────────────────────────────────
+    function val(v) {
+      return (v === null || v === undefined || v === '') ? '—' : v;
+    }
+
+    function formatDuration(seconds) {
+      if (seconds === null || seconds === undefined) return '—';
+      const s = Math.round(seconds);
+      const m = Math.floor(s / 60);
+      const rem = String(s % 60).padStart(2, '0');
+      return `${m}:${rem}`;
+    }
+
+    function isMuted(v) {
+      return v === null || v === undefined || v === '';
+    }
+
+    // ── Config ────────────────────────────────────────────
+    async function loadConfig() {
+      try {
+        const res = await fetch('/config');
+        const data = await res.json();
+        folders = data.folders || [];
+        renderFolderList();
+        if (folders.length > 0) scan();
+      } catch (e) {
+        setStatus('Could not load config.');
+      }
+    }
+
+    async function saveConfig() {
+      try {
+        const res = await fetch('/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folders }),
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          alert(data.error || 'Failed to save config.');
+          return false;
+        }
+        return true;
+      } catch (e) {
+        alert('Could not save config.');
+        return false;
+      }
+    }
+
+    function renderFolderList() {
+      const list = document.getElementById('folder-list');
+      // Remove existing folder items (keep the add-row)
+      const addRow = list.querySelector('.add-folder-row');
+      list.innerHTML = '';
+
+      folders.forEach((path, i) => {
+        const item = document.createElement('div');
+        item.className = 'folder-item';
+        item.innerHTML = `<span title="${escHtml(path)}">${escHtml(path)}</span><button data-i="${i}" title="Remove">×</button>`;
+        item.querySelector('button').addEventListener('click', () => removeFolder(i));
+        list.appendChild(item);
+      });
+
+      list.appendChild(addRow);
+    }
+
+    async function addFolder() {
+      const input = document.getElementById('folder-input');
+      const path = input.value.trim();
+      if (!path) return;
+      if (folders.includes(path)) { input.value = ''; return; }
+      folders.push(path);
+      renderFolderList();
+      const ok = await saveConfig();
+      if (!ok) {
+        folders.pop();
+        renderFolderList();
+        input.value = path;
+        return;
+      }
+      input.value = '';
+    }
+
+    async function removeFolder(i) {
+      folders.splice(i, 1);
+      renderFolderList();
+      await saveConfig();
+    }
+
+    // ── Scan ──────────────────────────────────────────────
+    async function scan() {
+      const btn = document.getElementById('scan-btn');
+      btn.disabled = true;
+      setStatus('Scanning…');
+      try {
+        const res = await fetch('/tracks');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        allTracks = await res.json();
+        setStatus(`${allTracks.length} track${allTracks.length !== 1 ? 's' : ''}`);
+        renderTable();
+      } catch (e) {
+        setStatus('Scan failed.');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function setStatus(msg) {
+      document.getElementById('status').textContent = msg;
+    }
+
+    // ── Table ─────────────────────────────────────────────
+    function getFiltered() {
+      if (!searchQuery) return allTracks;
+      return allTracks.filter(t => {
+        const haystack = [t.title, t.artist, t.album, t.genre, t.file_name]
+          .filter(Boolean).join(' ').toLowerCase();
+        return haystack.includes(searchQuery);
+      });
+    }
+
+    function getSorted(tracks) {
+      if (!sortCol) return tracks;
+      return [...tracks].sort((a, b) => {
+        let av = a[sortCol], bv = b[sortCol];
+        // nulls to bottom regardless of direction
+        if (av === null || av === undefined) return 1;
+        if (bv === null || bv === undefined) return -1;
+        // title fallback
+        if (sortCol === 'title') {
+          av = av || a.file_name || '';
+          bv = bv || b.file_name || '';
+        }
+        if (typeof av === 'number' && typeof bv === 'number') {
+          return sortDir === 'asc' ? av - bv : bv - av;
+        }
+        av = String(av).toLowerCase();
+        bv = String(bv).toLowerCase();
+        if (av < bv) return sortDir === 'asc' ? -1 : 1;
+        if (av > bv) return sortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    function renderTable() {
+      const filtered = getSorted(getFiltered());
+      const tbody = document.getElementById('track-tbody');
+
+      if (filtered.length === 0) {
+        const msg = allTracks.length === 0
+          ? 'Add a folder and click Scan to load your library.'
+          : 'No tracks match your search.';
+        tbody.innerHTML = `<tr><td colspan="9"><div id="empty-state">${msg}</div></td></tr>`;
+        return;
+      }
+
+      const rows = filtered.map(t => {
+        const title = t.title || t.file_name;
+        const isError = !!t.error;
+        const titleDisplay = isError ? `⚠ ${escHtml(t.file_name)}` : escHtml(title);
+
+        return `<tr class="${isError ? 'error-row' : ''}">
+          <td class="title-cell${isMuted(t.title) && !isError ? ' muted' : ''}" title="${escHtml(title)}">${titleDisplay}</td>
+          <td class="${isMuted(t.artist) ? 'muted' : ''}">${escHtml(val(t.artist))}</td>
+          <td class="${isMuted(t.album) ? 'muted' : ''}">${escHtml(val(t.album))}</td>
+          <td class="${isMuted(t.genre) ? 'muted' : ''}">${escHtml(val(t.genre))}</td>
+          <td class="right${isMuted(t.bpm) ? ' muted' : ''}">${escHtml(val(t.bpm))}</td>
+          <td class="${isMuted(t.key) ? 'muted' : ''}">${escHtml(val(t.key))}</td>
+          <td class="right${isMuted(t.duration_seconds) ? ' muted' : ''}">${formatDuration(t.duration_seconds)}</td>
+          <td class="${isMuted(t.file_format) ? 'muted' : ''}">${escHtml(val(t.file_format ? t.file_format.toUpperCase() : null))}</td>
+          <td class="right${isMuted(t.file_size_mb) ? ' muted' : ''}">${t.file_size_mb !== null && t.file_size_mb !== undefined ? t.file_size_mb.toFixed(1) : '—'}</td>
+        </tr>`;
+      });
+
+      tbody.innerHTML = rows.join('');
+    }
+
+    function updateSortHeaders() {
+      document.querySelectorAll('th[data-col]').forEach(th => {
+        const col = th.dataset.col;
+        th.classList.toggle('active', col === sortCol);
+        // strip old indicators
+        th.textContent = th.textContent.replace(/ [↑↓]$/, '');
+        if (col === sortCol) {
+          th.textContent += sortDir === 'asc' ? ' ↑' : ' ↓';
+        }
+      });
+    }
+
+    // ── Escape HTML ───────────────────────────────────────
+    function escHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // ── Event wiring ──────────────────────────────────────
+    document.getElementById('config-toggle').addEventListener('click', () => {
+      document.getElementById('config-panel').classList.toggle('visible');
+    });
+
+    document.getElementById('scan-btn').addEventListener('click', scan);
+
+    document.getElementById('add-folder-btn').addEventListener('click', addFolder);
+
+    document.getElementById('folder-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') addFolder();
+    });
+
+    document.getElementById('search-input').addEventListener('input', e => {
+      searchQuery = e.target.value.toLowerCase();
+      renderTable();
+    });
+
+    document.querySelectorAll('th[data-col]').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.dataset.col;
+        if (sortCol === col) {
+          sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          sortCol = col;
+          sortDir = 'asc';
+        }
+        updateSortHeaders();
+        renderTable();
+      });
+    });
+
+    // ── Init ──────────────────────────────────────────────
+    loadConfig();
+  </script>
 </body>
 </html>
