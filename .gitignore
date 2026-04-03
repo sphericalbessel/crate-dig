@@ -1,3 +1,12 @@
+# macOS
+.DS_Store
+
+# IDE
+.cursor/
+
+# Project config (will contain local file paths)
+config.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
