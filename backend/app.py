@@ -6,6 +6,7 @@ import sys
 from flask import Flask, jsonify, request, send_file
 
 sys.path.insert(0, os.path.dirname(__file__))
+from fileops import delete_file, move_file, rename_from_tags
 from scanner import scan_library
 
 logging.basicConfig(level=logging.INFO)
@@ -62,12 +63,60 @@ def post_config():
     return jsonify(config)
 
 
+def _find_track_path(track_id):
+    config = _read_config()
+    tracks = scan_library(config.get('folders', []))
+    for track in tracks:
+        if track['id'] == track_id:
+            return track['file_path']
+    return None
+
+
 @app.get('/tracks')
 def get_tracks():
     config = _read_config()
     folders = config.get('folders', [])
     tracks = scan_library(folders)
     return jsonify(tracks)
+
+
+@app.post('/api/tracks/move')
+def move_track():
+    body = request.get_json(silent=True)
+    if not body or 'track_id' not in body or 'destination_dir' not in body:
+        return jsonify({'error': 'Request body must include "track_id" and "destination_dir"'}), 400
+
+    file_path = _find_track_path(body['track_id'])
+    if file_path is None:
+        return jsonify({'error': 'Track not found'}), 404
+
+    return jsonify(move_file(file_path, body['destination_dir']))
+
+
+@app.post('/api/tracks/delete')
+def delete_track():
+    body = request.get_json(silent=True)
+    if not body or 'track_id' not in body:
+        return jsonify({'error': 'Request body must include "track_id"'}), 400
+
+    file_path = _find_track_path(body['track_id'])
+    if file_path is None:
+        return jsonify({'error': 'Track not found'}), 404
+
+    return jsonify(delete_file(file_path))
+
+
+@app.post('/api/tracks/rename')
+def rename_track():
+    body = request.get_json(silent=True)
+    if not body or 'track_id' not in body or 'pattern' not in body:
+        return jsonify({'error': 'Request body must include "track_id" and "pattern"'}), 400
+
+    file_path = _find_track_path(body['track_id'])
+    if file_path is None:
+        return jsonify({'error': 'Track not found'}), 404
+
+    return jsonify(rename_from_tags(file_path, body['pattern']))
 
 
 if __name__ == '__main__':
