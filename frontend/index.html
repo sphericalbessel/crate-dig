@@ -252,7 +252,8 @@
     th:nth-child(6) { width: 5%; }        /* Key */
     th:nth-child(7) { width: 6%; }        /* Duration */
     th:nth-child(8) { width: 4%; }        /* Fmt */
-    th:nth-child(9) { width: 5%; }        /* MB */
+    th:nth-child(9) { width: 4%; }        /* MB */
+    th:nth-child(10) { width: 9%; }       /* Actions */
 
     td {
       padding: 0 16px;
@@ -276,6 +277,20 @@
       color: var(--muted);
       font-size: 13px;
     }
+
+    /* ── Action buttons ── */
+    .action-btn {
+      background: none;
+      border: 1px solid #444;
+      color: #aaa;
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-size: 11px;
+      cursor: pointer;
+      margin-right: 2px;
+    }
+    .action-btn:hover { border-color: #888; color: #eee; }
+    .action-btn.danger:hover { border-color: #c0392b; color: #e74c3c; }
   </style>
 </head>
 <body>
@@ -318,10 +333,11 @@
           <th data-col="duration_seconds" class="right">Duration</th>
           <th data-col="file_format">Fmt</th>
           <th data-col="file_size_mb" class="right">MB</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody id="track-tbody">
-        <tr><td colspan="9"><div id="empty-state">Add a folder and click Scan to load your library.</div></td></tr>
+        <tr><td colspan="10"><div id="empty-state">Add a folder and click Scan to load your library.</div></td></tr>
       </tbody>
     </table>
   </div>
@@ -486,7 +502,7 @@
         const msg = allTracks.length === 0
           ? 'Add a folder and click Scan to load your library.'
           : 'No tracks match your search.';
-        tbody.innerHTML = `<tr><td colspan="9"><div id="empty-state">${msg}</div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10"><div id="empty-state">${msg}</div></td></tr>`;
         return;
       }
 
@@ -505,6 +521,11 @@
           <td class="right${isMuted(t.duration_seconds) ? ' muted' : ''}">${formatDuration(t.duration_seconds)}</td>
           <td class="${isMuted(t.file_format) ? 'muted' : ''}">${escHtml(val(t.file_format ? t.file_format.toUpperCase() : null))}</td>
           <td class="right${isMuted(t.file_size_mb) ? ' muted' : ''}">${t.file_size_mb !== null && t.file_size_mb !== undefined ? t.file_size_mb.toFixed(1) : '—'}</td>
+          <td>
+            <button class="action-btn" data-action="move" data-track-id="${escHtml(t.id)}">Move</button>
+            <button class="action-btn" data-action="rename" data-track-id="${escHtml(t.id)}">Rename</button>
+            <button class="action-btn danger" data-action="delete" data-track-id="${escHtml(t.id)}">Delete</button>
+          </td>
         </tr>`;
       });
 
@@ -531,6 +552,59 @@
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
+    }
+
+    // ── File operations ───────────────────────────────────
+    async function moveTrack(track) {
+      const dest = prompt('Move to folder:', '');
+      if (dest === null) return;
+      if (!dest.trim()) { alert('Please enter a destination folder.'); return; }
+      try {
+        const res = await fetch('/api/tracks/move', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ track_id: track.id, destination_dir: dest.trim() }),
+        });
+        const result = await res.json();
+        if (!res.ok) { setStatus('Error: ' + (result.error || res.status)); return; }
+        if (result.success) { setStatus('Moved: ' + track.file_name); scan(); }
+        else { setStatus('Move failed: ' + result.error); }
+      } catch (e) { setStatus('Move failed.'); }
+    }
+
+    async function renameTrack(track) {
+      const pattern = prompt('Rename pattern:', '{artist} - {title}');
+      if (pattern === null) return;
+      if (!pattern.trim()) { alert('Please enter a pattern.'); return; }
+      try {
+        const res = await fetch('/api/tracks/rename', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ track_id: track.id, pattern: pattern.trim() }),
+        });
+        const result = await res.json();
+        if (!res.ok) { setStatus('Error: ' + (result.error || res.status)); return; }
+        if (result.success) {
+          const warn = result.warnings ? ' (warnings: ' + result.warnings.join('; ') + ')' : '';
+          setStatus('Renamed: ' + track.file_name + warn);
+          scan();
+        } else { setStatus('Rename failed: ' + result.error); }
+      } catch (e) { setStatus('Rename failed.'); }
+    }
+
+    async function deleteTrack(track) {
+      if (!confirm('Move "' + track.file_name + '" to trash?')) return;
+      try {
+        const res = await fetch('/api/tracks/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ track_id: track.id }),
+        });
+        const result = await res.json();
+        if (!res.ok) { setStatus('Error: ' + (result.error || res.status)); return; }
+        if (result.success) { setStatus('Deleted: ' + track.file_name); scan(); }
+        else { setStatus('Delete failed: ' + result.error); }
+      } catch (e) { setStatus('Delete failed.'); }
     }
 
     // ── Event wiring ──────────────────────────────────────
@@ -563,6 +637,16 @@
         updateSortHeaders();
         renderTable();
       });
+    });
+
+    document.getElementById('track-tbody').addEventListener('click', async e => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const track = allTracks.find(t => t.id === btn.dataset.trackId);
+      if (!track) return;
+      if (btn.dataset.action === 'move') await moveTrack(track);
+      else if (btn.dataset.action === 'rename') await renameTrack(track);
+      else if (btn.dataset.action === 'delete') await deleteTrack(track);
     });
 
     // ── Init ──────────────────────────────────────────────
