@@ -291,6 +291,20 @@
     }
     .action-btn:hover { border-color: #888; color: #eee; }
     .action-btn.danger:hover { border-color: #c0392b; color: #e74c3c; }
+
+    /* ── Inline editing ── */
+    td.editable { cursor: text; }
+    td.editable:hover { background: var(--surface2); }
+    .edit-input {
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: inherit;
+      font: inherit;
+      padding: 1px 4px;
+      width: 100%;
+      box-sizing: border-box;
+      outline: none;
+    }
   </style>
 </head>
 <body>
@@ -511,13 +525,18 @@
         const isError = !!t.error;
         const titleDisplay = isError ? `⚠ ${escHtml(t.file_name)}` : escHtml(title);
 
+        const ec = (field, extra = '') => {
+          const v = t[field];
+          return `class="editable${isMuted(v) ? ' muted' : ''}${extra ? ' ' + extra : ''}" data-field="${field}" data-track-id="${t.id}" data-raw="${escHtml(v ?? '')}"`;
+        };
+
         return `<tr class="${isError ? 'error-row' : ''}">
-          <td class="title-cell${isMuted(t.title) && !isError ? ' muted' : ''}" title="${escHtml(title)}">${titleDisplay}</td>
-          <td class="${isMuted(t.artist) ? 'muted' : ''}">${escHtml(val(t.artist))}</td>
-          <td class="${isMuted(t.album) ? 'muted' : ''}">${escHtml(val(t.album))}</td>
-          <td class="${isMuted(t.genre) ? 'muted' : ''}">${escHtml(val(t.genre))}</td>
-          <td class="right${isMuted(t.bpm) ? ' muted' : ''}">${escHtml(val(t.bpm))}</td>
-          <td class="${isMuted(t.key) ? 'muted' : ''}">${escHtml(val(t.key))}</td>
+          <td ${isError ? `class="title-cell"` : ec('title', 'title-cell')} title="${escHtml(title)}">${titleDisplay}</td>
+          <td ${ec('artist')}>${escHtml(val(t.artist))}</td>
+          <td ${ec('album')}>${escHtml(val(t.album))}</td>
+          <td ${ec('genre')}>${escHtml(val(t.genre))}</td>
+          <td ${ec('bpm', 'right')}>${escHtml(val(t.bpm))}</td>
+          <td ${ec('key')}>${escHtml(val(t.key))}</td>
           <td class="right${isMuted(t.duration_seconds) ? ' muted' : ''}">${formatDuration(t.duration_seconds)}</td>
           <td class="${isMuted(t.file_format) ? 'muted' : ''}">${escHtml(val(t.file_format ? t.file_format.toUpperCase() : null))}</td>
           <td class="right${isMuted(t.file_size_mb) ? ' muted' : ''}">${t.file_size_mb !== null && t.file_size_mb !== undefined ? t.file_size_mb.toFixed(1) : '—'}</td>
@@ -641,13 +660,78 @@
 
     document.getElementById('track-tbody').addEventListener('click', async e => {
       const btn = e.target.closest('[data-action]');
-      if (!btn) return;
-      const track = allTracks.find(t => t.id === btn.dataset.trackId);
-      if (!track) return;
-      if (btn.dataset.action === 'move') await moveTrack(track);
-      else if (btn.dataset.action === 'rename') await renameTrack(track);
-      else if (btn.dataset.action === 'delete') await deleteTrack(track);
+      if (btn) {
+        const track = allTracks.find(t => t.id === btn.dataset.trackId);
+        if (!track) return;
+        if (btn.dataset.action === 'move') await moveTrack(track);
+        else if (btn.dataset.action === 'rename') await renameTrack(track);
+        else if (btn.dataset.action === 'delete') await deleteTrack(track);
+        return;
+      }
+
+      const td = e.target.closest('td.editable');
+      if (td && !td.querySelector('input')) startEdit(td);
     });
+
+    function startEdit(td) {
+      const { field, trackId, raw } = td.dataset;
+      const originalHtml = td.innerHTML;
+      let isSaving = false;
+
+      const input = document.createElement('input');
+      input.className = 'edit-input';
+      input.value = raw;
+      td.textContent = '';
+      td.appendChild(input);
+      input.focus();
+      input.select();
+
+      input.addEventListener('keydown', async e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          isSaving = true;
+          const ok = await saveTag(trackId, field, input.value);
+          if (ok) {
+            const track = allTracks.find(t => t.id === trackId);
+            const newVal = track ? track[field] : (input.value.trim() || null);
+            td.dataset.raw = newVal ?? '';
+            td.classList.toggle('muted', isMuted(newVal));
+            if (field === 'title') {
+              td.textContent = val(newVal !== null ? newVal : (track ? track.file_name : null));
+            } else {
+              td.textContent = val(newVal);
+            }
+          } else {
+            isSaving = false;
+            td.textContent = '';
+            td.appendChild(input);
+            input.focus();
+          }
+        } else if (e.key === 'Escape') {
+          td.innerHTML = originalHtml;
+        }
+      });
+
+      input.addEventListener('blur', () => {
+        if (!isSaving) td.innerHTML = originalHtml;
+      });
+    }
+
+    async function saveTag(trackId, field, value) {
+      try {
+        const res = await fetch('/api/tracks/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ track_id: trackId, field, value }),
+        });
+        const result = await res.json();
+        if (!res.ok) { setStatus('Save failed: ' + (result.error || res.status)); return false; }
+        const track = allTracks.find(t => t.id === trackId);
+        if (track) track[field] = value.trim() || null;
+        setStatus('Saved');
+        return true;
+      } catch (e) { setStatus('Save failed.'); return false; }
+    }
 
     // ── Init ──────────────────────────────────────────────
     loadConfig();

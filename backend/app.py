@@ -8,6 +8,7 @@ from flask import Flask, jsonify, request, send_file
 sys.path.insert(0, os.path.dirname(__file__))
 from fileops import delete_file, move_file, rename_from_tags
 from scanner import scan_library
+from tagger import write_tag
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -117,6 +118,26 @@ def rename_track():
         return jsonify({'error': 'Track not found'}), 404
 
     return jsonify(rename_from_tags(file_path, body['pattern']))
+
+
+@app.post('/api/tracks/update')
+def update_track():
+    body = request.get_json(silent=True)
+    if not body or not all(k in body for k in ('track_id', 'field', 'value')):
+        return jsonify({'error': 'Request body must include "track_id", "field", and "value"'}), 400
+
+    file_path = _find_track_path(body['track_id'])
+    if file_path is None:
+        return jsonify({'error': 'Track not found'}), 404
+
+    try:
+        write_tag(file_path, body['field'], str(body['value']))
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    return jsonify({'success': True})
 
 
 if __name__ == '__main__':
